@@ -1,0 +1,46 @@
+pipeline {
+    agent any
+
+    environment {
+        JC_API_KEY = credentials('jc-api-key')
+        SLACK_WEBHOOK_URL = credentials('slack-webhook-url')
+        S1_GROUP_NAME = 'No SentinelOne'
+        CSV_OUTPUT_PATH = "${WORKSPACE}/sentineloneStatus.csv"
+    }
+
+    stages {
+        stage('Download PowerShell Script') {
+            steps {
+                sh 'curl -o SentinelOneAudit.ps1 https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/SentinelOneAudit.ps1'
+            }
+        }
+
+        stage('Run SentinelOne Audit') {
+            steps {
+                powershell """
+                $scriptPath = "${WORKSPACE}/SentinelOneAudit.ps1"
+                & $scriptPath `
+                    -CsvPath "$env:CSV_OUTPUT_PATH" `
+                    -GroupName "$env:S1_GROUP_NAME" `
+                    -SlackWebhookUrl '$env:SLACK_WEBHOOK_URL' `
+                    -APIKey '$env:JC_API_KEY'
+                """
+            }
+        }
+
+        stage('Archive CSV Report') {
+            steps {
+                archiveArtifacts artifacts: 'sentineloneStatus.csv', onlyIfSuccessful: true
+            }
+        }
+    }
+
+    post {
+        failure {
+            echo "❌ SentinelOne audit failed."
+        }
+        success {
+            echo "✅ SentinelOne audit completed. CSV uploaded and Slack notified."
+        }
+    }
+}
